@@ -1,8 +1,6 @@
 # rewriting-roteiro-shrek
 
-Automação que mantém commits diários nas horas, reescrevendo o roteiro de **Shrek** palavra por palavra — e fazendo o commit aparecer como atividade verde no perfil do autor.
-
-> Antes chamado de `script-commit`, renomeado para `rewriting-roteiro-shrek`.
+Automação que mantém commits diários nas horas, reescrevendo o roteiro de **Shrek** palavra por palavra.
 
 ## O que é
 
@@ -37,7 +35,7 @@ O workflow `.github/workflows/daily-commit.yml` roda a cada 15 minutos na nuvem 
 ### Opção B — Cron local
 
 ```cron
-*/15 * * * * cd ~/script-commit/rewriting-roteiro-shrek && git fetch origin && git reset --hard origin/main && RANDOM_MIN_MINUTES_BETWEEN_COMMITS=240 RANDOM_MAX_MINUTES_BETWEEN_COMMITS=480 BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS=120 BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS=360 BOOST_FIXED_DATES=01-01,04-21,05-01,09-07,10-12,11-02,11-15,11-20,12-25 BOOST_DATES= SAFETY_MAX_MINUTES_WITHOUT_COMMIT=1200 MAX_COMMITS_PER_DAY=10 COMMIT_DAY_TIMEZONE=America/Sao_Paulo HEARTBEAT_FILE=.daily-commit/heartbeat.json SOURCE_TEXT_FILE="meu roteiro.txt" OUTPUT_TEXT_FILE=roteiro.md WORD_STATE_FILE=.daily-commit/word-state.json TARGET_BRANCH=main FORCE_COMMIT=false SKIP_PUSH=false /usr/bin/go run ./scripts/daily_commit.go >> $HOME/daily-commit.log 2>&1
+*/15 * * * * cd /home/user/script-commit/rewriting-roteiro-shrek && git fetch origin && git reset --hard origin/main && RANDOM_MIN_MINUTES_BETWEEN_COMMITS=240 RANDOM_MAX_MINUTES_BETWEEN_COMMITS=480 BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS=120 BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS=360 BOOST_FIXED_DATES=01-01,04-21,05-01,09-07,10-12,11-02,11-15,11-20,12-25 BOOST_DATES= SAFETY_MAX_MINUTES_WITHOUT_COMMIT=1200 MAX_COMMITS_PER_DAY=10 COMMIT_DAY_TIMEZONE=America/Sao_Paulo HEARTBEAT_FILE=.daily-commit/heartbeat.json SOURCE_TEXT_FILE="meu roteiro.txt" OUTPUT_TEXT_FILE=roteiro.md WORD_STATE_FILE=.daily-commit/word-state.json TARGET_BRANCH=main FORCE_COMMIT=false SKIP_PUSH=false /usr/bin/go run ./scripts/daily_commit.go >> $HOME/daily-commit.log 2>&1
 ```
 
 O `git fetch origin && git reset --hard origin/main` antes de rodar mantém a máquina alinhada com o GitHub — sem isso as duas fontes brigam e o push local é rejeitado.
@@ -47,11 +45,11 @@ O `git fetch origin && git reset --hard origin/main` antes de rodar mantém a m�
 O gráfico de contribuições do GitHub só conta commits em que o **e-mail do autor** pertence a uma conta verificada. Por isso o workflow configura a identidade:
 
 ```yaml
-git config user.name "oMaike"
-git config user.email "137224991+oMaike@users.noreply.github.com"
+git config user.name "user.name"
+git config user.email "email@gmail.com"
 ```
 
-Authorando com o e-mail da conta (`137224991+oMaike@users.noreply.github.com`), tanto os commits do Actions quanto os do cron contam como atividade do autor. (Antes o Actions usava `github-actions[bot]`, que nunca aparece no gráfico.)
+Authorando com o e-mail da conta (`email@email.com`), tanto os commits do Actions quanto os do cron contam como atividade do autor.
 
 ## Arquivos
 
@@ -79,5 +77,5 @@ SKIP_PUSH=true go run ./scripts/daily_commit.go
 | Sintoma | Solução |
 |---|---|
 | `non-fast-forward` / push rejeitado | máquina está atrás do remoto → `git fetch origin && git reset --hard origin/main` (o cron já faz isso sozinho agora) |
-| commit não aparece no gráfico | confira se o autor é `oMaike <137224991+oMaike@users.noreply.github.com>` |
+| commit não aparece no gráfico | confira se o autor é `user <email.@gmail.com>` |
 | texto reiniciando | normal — o roteiro chegou ao fim e recomeçou (veja `completed_runs` no word-state) |
