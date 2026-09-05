@@ -1,180 +1,83 @@
-# Daily Commit Watchdog em Go
+# rewriting-roteiro-shrek
 
-Automacao para manter o repositorio privado com commits frequentes, em horarios aleatorios, sem deixar passar 20 horas entre um commit e outro.
+Automação que mantém commits diários nas horas, reescrevendo o roteiro de **Shrek** palavra por palavra — e fazendo o commit aparecer como atividade verde no perfil do autor.
 
-O workflow roda a cada 15 minutos, mas o script Go escolhe uma janela aleatoria entre commits. Em dias normais usa `240` a `480` minutos, dando media perto de 4 commits por dia. Em sextas, sabados e feriados usa `120` a `360` minutos, podendo passar de 4 commits. O limite continua sendo 10 commits por dia.
+> Antes chamado de `script-commit`, renomeado para `rewriting-roteiro-shrek`.
 
-## Como instalar no repositorio `oMaike/script-commit`
+## O que é
 
-1. Copie as pastas `.github` e `scripts` deste diretorio para a raiz do repositorio.
-2. Faca commit e push desses arquivos no GitHub.
-3. No GitHub, abra `Settings > Actions > General`.
-4. Em `Workflow permissions`, selecione `Read and write permissions`.
-5. Abra `Actions > Daily commit watchdog > Run workflow`, marque `force_commit` e execute uma vez para testar.
+Um "watchdog" de commits: ele garante que o repositório receba commits de forma contínua e imprevisível, sem nunca deixar passar mais de 20 horas entre um commit e outro. A cada commit, uma palavra do roteiro de Shrek é anexada a `roteiro.md`, montando o texto aos poucos.
 
-## Teste no Windows
+## Como funciona
 
-Depois de instalar Git e Go, abra o `cmd` na raiz do repositorio e rode:
+O agendamento é **determinístico e aleatório ao mesmo tempo**:
 
-```bat
-test_now.cmd
-```
+- Duas fontes rodam o mesmo binário (`scripts/daily_commit.go`): o **GitHub Actions** e um **cron local** da máquina.
+- Ambas usam o **hash do último commit** como semente para sortear o próximo horário:
+  - dias normais: de **240 a 480 minutos** (~4 commits/dia);
+  - sextas, sábados e feriados (boost): de **120 a 360 minutos**;
+  - limite de segurança: nunca mais que **20 horas** sem commit;
+  - teto de **10 commits/dia**.
+- Como a semente é a mesma (mesmo commit), as duas fontes calculam o mesmo próximo horário e se coordenam — quem rodar primeiro cria o commit, a outra vê o commit novo e respeita o novo sorteio.
 
-Esse teste cria commit local e nao faz push porque usa `SKIP_PUSH=true`.
+Cada commit:
 
-Para rodar sem forcar commit, use:
+1. anexa **1 palavra** de `meu roteiro.txt` a `roteiro.md`;
+2. atualiza `.daily-commit/word-state.json` (próximo índice) e `heartbeat.json`;
+3. cria o commit e faz push para `main`.
 
-```bat
-run_watchdog.cmd
-```
+Quando o texto chega ao fim, ele reinicia da primeira palavra (contando as voltas em `completed_runs`).
 
-## Roteiro palavra por palavra
+## Como roda
 
-O script monta o arquivo `roteiro.md` com uma palavra por commit.
+### Opção A — GitHub Actions (recomendado, serve para sempre)
 
-Ele usa o arquivo local `meu roteiro.txt` como fonte. A cada execucao valida, o script pega a proxima palavra desse arquivo, acrescenta em `roteiro.md`, atualiza `.daily-commit/word-state.json` e cria um commit. Quando chega no fim do texto, ele volta para a primeira palavra e continua em um novo ciclo.
+O workflow `.github/workflows/daily-commit.yml` roda a cada 15 minutos na nuvem do GitHub. Vantagem: funciona mesmo com a máquina desligada.
 
-Arquivos usados:
-
-- `meu roteiro.txt`: texto-fonte local extraido do seu JS.
-- `roteiro.md`: arquivo gerado, uma palavra por vez.
-- `.daily-commit/word-state.json`: indice da proxima palavra.
-
-Para converter novamente um JS no mesmo formato:
-
-```powershell
-$jsPath = "meu roteiro.js"
-$txtPath = "meu roteiro.txt"
-$text = [System.IO.File]::ReadAllText($jsPath, [System.Text.Encoding]::UTF8)
-$startToken = "enviarScript(`"
-$start = $text.IndexOf($startToken) + $startToken.Length
-$end = $text.LastIndexOf("`).then")
-$body = $text.Substring($start, $end - $start).Trim()
-[System.IO.File]::WriteAllText($txtPath, $body, [System.Text.Encoding]::UTF8)
-test_now.cmd
-```
-
-Para reiniciar do zero:
-
-```bash
-rm -f roteiro.md .daily-commit/word-state.json
-```
-
-## Rodar 24/7 em uma VPS
-
-O script nao precisa ficar aberto em loop. O ideal e deixar a VPS ligada 24/7 e chamar o script a cada 15 minutos com `cron`. O script decide sozinho se ja chegou um horario aleatorio de commit.
-
-### 1. Instale Git e Go
-
-Em Ubuntu/Debian:
-
-```bash
-sudo apt update
-sudo apt install -y git golang-go
-```
-
-Confira:
-
-```bash
-git --version
-go version
-```
-
-### 2. Clone o repositorio privado
-
-Recomendado com SSH:
-
-```bash
-git clone git@github.com:oMaike/script-commit.git
-cd script-commit
-```
-
-Se a VPS ainda nao tiver chave SSH:
-
-```bash
-ssh-keygen -t ed25519 -C "vps-script-commit"
-cat ~/.ssh/id_ed25519.pub
-```
-
-Adicione a chave publica no GitHub em `Settings > Deploy keys` do repositorio e marque `Allow write access`.
-
-### 3. Configure o autor dos commits
-
-Dentro do repositorio:
-
-```bash
-git config user.name "oMaike Bot"
-git config user.email "oMaike@users.noreply.github.com"
-```
-
-### 4. Teste manualmente com push real
-
-```bash
-RANDOM_MIN_MINUTES_BETWEEN_COMMITS=240 \
-RANDOM_MAX_MINUTES_BETWEEN_COMMITS=480 \
-BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS=120 \
-BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS=360 \
-BOOST_FIXED_DATES=01-01,04-21,05-01,09-07,10-12,11-02,11-15,11-20,12-25 \
-BOOST_DATES= \
-SAFETY_MAX_MINUTES_WITHOUT_COMMIT=1200 \
-MAX_COMMITS_PER_DAY=10 \
-COMMIT_DAY_TIMEZONE=America/Sao_Paulo \
-HEARTBEAT_FILE=.daily-commit/heartbeat.json \
-SOURCE_TEXT_FILE="meu roteiro.txt" \
-OUTPUT_TEXT_FILE=roteiro.md \
-WORD_STATE_FILE=.daily-commit/word-state.json \
-TARGET_BRANCH=main \
-FORCE_COMMIT=true \
-SKIP_PUSH=false \
-go run ./scripts/daily_commit.go
-```
-
-Se esse comando criar commit e fizer push, a VPS esta pronta.
-
-### 5. Agende com cron
-
-Abra o cron:
-
-```bash
-crontab -e
-```
-
-Adicione esta linha, trocando `/home/ubuntu/script-commit` pelo caminho real do seu clone:
+### Opção B — Cron local
 
 ```cron
-*/15 * * * * cd /home/ubuntu/script-commit && RANDOM_MIN_MINUTES_BETWEEN_COMMITS=240 RANDOM_MAX_MINUTES_BETWEEN_COMMITS=480 BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS=120 BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS=360 BOOST_FIXED_DATES=01-01,04-21,05-01,09-07,10-12,11-02,11-15,11-20,12-25 BOOST_DATES= SAFETY_MAX_MINUTES_WITHOUT_COMMIT=1200 MAX_COMMITS_PER_DAY=10 COMMIT_DAY_TIMEZONE=America/Sao_Paulo HEARTBEAT_FILE=.daily-commit/heartbeat.json SOURCE_TEXT_FILE="meu roteiro.txt" OUTPUT_TEXT_FILE=roteiro.md WORD_STATE_FILE=.daily-commit/word-state.json TARGET_BRANCH=main FORCE_COMMIT=false SKIP_PUSH=false /usr/bin/go run ./scripts/daily_commit.go >> $HOME/daily-commit.log 2>&1
+*/15 * * * * cd ~/script-commit/rewriting-roteiro-shrek && git fetch origin && git reset --hard origin/main && RANDOM_MIN_MINUTES_BETWEEN_COMMITS=240 RANDOM_MAX_MINUTES_BETWEEN_COMMITS=480 BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS=120 BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS=360 BOOST_FIXED_DATES=01-01,04-21,05-01,09-07,10-12,11-02,11-15,11-20,12-25 BOOST_DATES= SAFETY_MAX_MINUTES_WITHOUT_COMMIT=1200 MAX_COMMITS_PER_DAY=10 COMMIT_DAY_TIMEZONE=America/Sao_Paulo HEARTBEAT_FILE=.daily-commit/heartbeat.json SOURCE_TEXT_FILE="meu roteiro.txt" OUTPUT_TEXT_FILE=roteiro.md WORD_STATE_FILE=.daily-commit/word-state.json TARGET_BRANCH=main FORCE_COMMIT=false SKIP_PUSH=false /usr/bin/go run ./scripts/daily_commit.go >> $HOME/daily-commit.log 2>&1
 ```
 
-Esse cron roda de 15 em 15 minutos. O script decide sozinho se ja esta na hora aleatoria de commitar.
+O `git fetch origin && git reset --hard origin/main` antes de rodar mantém a máquina alinhada com o GitHub — sem isso as duas fontes brigam e o push local é rejeitado.
 
-Para ver os logs:
+## Por que a atividade fica verde
+
+O gráfico de contribuições do GitHub só conta commits em que o **e-mail do autor** pertence a uma conta verificada. Por isso o workflow configura a identidade:
+
+```yaml
+git config user.name "oMaike"
+git config user.email "137224991+oMaike@users.noreply.github.com"
+```
+
+Authorando com o e-mail da conta (`137224991+oMaike@users.noreply.github.com`), tanto os commits do Actions quanto os do cron contam como atividade do autor. (Antes o Actions usava `github-actions[bot]`, que nunca aparece no gráfico.)
+
+## Arquivos
+
+| Arquivo | Papel |
+|---|---|
+| `scripts/daily_commit.go` | o watchdog em si (agenda, sorteio, palavra, push) |
+| `meu roteiro.txt` | texto-fonte (não versionado como saída) |
+| `roteiro.md` | saída gerada — 1 palavra por commit |
+| `.daily-commit/heartbeat.json` | último horário/estado do watchdog |
+| `.daily-commit/word-state.json` | índice da próxima palavra |
+| `.github/workflows/daily-commit.yml` | cron do GitHub Actions |
+
+## Rodar manualmente
 
 ```bash
-tail -f ~/daily-commit.log
+# força um commit agora (sem esperar o sorteio)
+FORCE_COMMIT=true go run ./scripts/daily_commit.go
+
+# cria commit local sem push (teste)
+SKIP_PUSH=true go run ./scripts/daily_commit.go
 ```
 
-Se o comando `which go` mostrar outro caminho, troque `/usr/bin/go` na linha do cron pelo caminho correto.
+## Troublehooting rápido
 
-## Configuracao
-
-No arquivo `.github/workflows/daily-commit.yml`, ajuste:
-
-- `RANDOM_MIN_MINUTES_BETWEEN_COMMITS`: menor intervalo aleatorio entre commits. Padrao: `240` minutos.
-- `RANDOM_MAX_MINUTES_BETWEEN_COMMITS`: maior intervalo aleatorio entre commits. Padrao: `480` minutos.
-- `BOOST_RANDOM_MIN_MINUTES_BETWEEN_COMMITS`: menor intervalo em sextas, sabados e feriados. Padrao: `120` minutos.
-- `BOOST_RANDOM_MAX_MINUTES_BETWEEN_COMMITS`: maior intervalo em sextas, sabados e feriados. Padrao: `360` minutos.
-- `BOOST_FIXED_DATES`: feriados fixos no formato `MM-DD`, separados por virgula.
-- `BOOST_DATES`: feriados moveis no formato `YYYY-MM-DD`, separados por virgula.
-- `SAFETY_MAX_MINUTES_WITHOUT_COMMIT`: limite de seguranca sem commit. Padrao: `1200` minutos, ou 20h.
-- `MAX_COMMITS_PER_DAY`: limite diario de commits do roteiro. Padrao: `10`.
-- `COMMIT_DAY_TIMEZONE`: fuso usado para contar o limite diario. Padrao: `America/Sao_Paulo`.
-- `HEARTBEAT_FILE`: arquivo que sera atualizado pelo commit automatico.
-- `SOURCE_TEXT_FILE`: texto-fonte usado para acrescentar uma palavra por commit.
-- `OUTPUT_TEXT_FILE`: arquivo gerado com as palavras, por padrao `roteiro.md`.
-- `WORD_STATE_FILE`: arquivo que guarda o indice da proxima palavra.
-- `cron`: horario/frequencia do watchdog. O valor atual, `*/15 * * * *`, roda a cada 15 minutos.
-- `go-version`: versao do Go usada pelo GitHub Actions.
-
-## Observacao importante
-
-GitHub Actions agenda workflows com boa confiabilidade, mas nao oferece garantia absoluta de execucao no minuto exato. Para garantia mais rigida de nao passar 20h, use o mesmo `scripts/daily_commit.go` em uma VPS/runner proprio com cron a cada 15 minutos.
+| Sintoma | Solução |
+|---|---|
+| `non-fast-forward` / push rejeitado | máquina está atrás do remoto → `git fetch origin && git reset --hard origin/main` (o cron já faz isso sozinho agora) |
+| commit não aparece no gráfico | confira se o autor é `oMaike <137224991+oMaike@users.noreply.github.com>` |
+| texto reiniciando | normal — o roteiro chegou ao fim e recomeçou (veja `completed_runs` no word-state) |
